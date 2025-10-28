@@ -88,7 +88,6 @@ for ts in u.trajectory:
     last_rmsds.append(rmsd)
 last_rmsds = np.array(last_rmsds)
 
-
 plt.figure(figsize=(6,4))
 plt.plot(np.arange(len(first_rmsds)), first_rmsds, label='RMSD to First Frame')
 plt.plot(np.arange(len(last_rmsds)), last_rmsds, alpha=0.8, label='RMSD to Last Frame')
@@ -111,8 +110,94 @@ np.save('last_rmsds.npy', last_rmsds)
 
 selA = u.select_atoms(args.selA)
 selB = u.select_atoms(args.selB)
-
 cutoff = args.cutoff
+
+# --- Distance histograms between selA (e.g. resid 61) and each residue in selB ---
+
+selB_resids = sorted(list(set(selB.resids)))
+n_res = len(selB_resids)
+
+all_distances_combined = []
+
+# figure layout: choose number of rows/columns automatically
+ncols = 3
+nrows = int(np.ceil(n_res / ncols))
+fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols*4, nrows*3))
+axes = axes.flatten()
+
+for i, resid in enumerate(selB_resids):
+    selB_res = u.select_atoms(f"not name H* and resid {resid}")
+    per_res_dists = []
+
+    for ts in u.trajectory:
+        dist = distance_array(selA.positions, selB_res.positions)
+        per_res_dists.append(np.min(dist))
+
+    per_res_dists = np.array(per_res_dists)
+    all_distances_combined.append(per_res_dists)
+
+    # plot each residue histogram normalized to % of frames
+    ax = axes[i]
+    ax.hist(
+        per_res_dists,
+        bins=30,
+        color='steelblue',
+        alpha=0.8,
+        weights=np.ones_like(per_res_dists) * 100 / len(per_res_dists)
+    )
+    ax.set_title(f"Resid {resid}", fontsize=10)
+    ax.set_xlabel("Min distance (Å)")
+    ax.set_ylabel("% of frames")
+
+    np.save(f"{args.output_prefix}_res{resid}_distances.npy", per_res_dists)
+
+# hide any unused subplots
+for j in range(i+1, len(axes)):
+    fig.delaxes(axes[j])
+
+plt.tight_layout()
+plt.savefig(f"{args.output_prefix}_res_subplots.png", bbox_inches='tight', dpi=300)
+plt.close()
+
+## Overlay plot
+# Extract unique residue IDs from selB
+selB_resids = sorted(list(set(selB.resids)))
+
+all_distances_combined = []  # for mean / pooled histogram
+
+plt.figure(figsize=(6,4))
+
+for resid in selB_resids:
+    selB_res = u.select_atoms(f"not name H* and resid {resid}")
+    per_res_dists = []
+
+    for ts in u.trajectory:
+        dist = distance_array(selA.positions, selB_res.positions)
+        per_res_dists.append(np.min(dist))  # closest atom distance per frame
+
+    per_res_dists = np.array(per_res_dists)
+    all_distances_combined.append(per_res_dists)
+
+    # plot individual histogram (normalized to % of frames)
+    plt.hist(
+        per_res_dists,
+        bins=30,
+        alpha=0.5,
+        label=f"Resid {resid}",
+        weights=np.ones_like(per_res_dists) * 100 / len(per_res_dists)
+    )
+
+    # save per-residue distance array
+    np.save(f"{args.output_prefix}_res{resid}_distances.npy", per_res_dists)
+
+plt.xlabel('Min distance (Å)')
+plt.ylabel('% of frames')
+plt.title('Distance distributions per residue')
+plt.legend(fontsize=8)
+plt.tight_layout()
+plt.savefig(f"{args.output_prefix}_overlay_hist.png", bbox_inches='tight', dpi=300)
+plt.close()
+
 
 contacts = np.zeros((len(selA), len(selB)), dtype=float)
 

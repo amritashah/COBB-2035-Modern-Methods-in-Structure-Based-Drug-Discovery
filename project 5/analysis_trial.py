@@ -116,7 +116,7 @@ contact_counts = Counter()
 total_frames = 0
 
 for ts in u.trajectory:
-    nearby = u.select_atoms("not name H* and byres around 4 (resid 61)")
+    nearby = u.select_atoms("not name H* and byres around 10 (resid 61)")
     for res in nearby.residues:
         contact_counts[res.resid] += 1
     total_frames += 1
